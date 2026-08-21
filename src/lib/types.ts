@@ -3,11 +3,14 @@ export type Grade = "Grade A" | "Grade B";
 
 export interface ProcurementRequest {
   crop: Crop;
+  unit: "bags";
   quantityBags: number;
   buyerLocation: string;
+  requiredDate: string;
   deadlineDays: number;
   grade: Grade;
   radiusKm: number;
+  maxPricePerUnit?: number;
 }
 
 export interface Supplier {
@@ -23,4 +26,15 @@ export interface Supplier {
 
 export interface MatchedSupplier extends Supplier {
   contributedBags: number;
+}
+
+export interface OrderSummary {
+  id: string;
+  demandId: string;
+  crop: Crop;
+  grade: Grade;
+  totalBags: number;
+  deliveryLocation: string;
+  readyByDays: number;
+  suppliers: MatchedSupplier[];
 }

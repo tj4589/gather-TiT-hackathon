@@ -33,11 +33,23 @@
 }
 
 body {
+  margin: 0;
   background: var(--color-cream);
   color: var(--color-ink);
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+select,
+input {
+  font: inherit;
+}
+
+::selection {
+  background: var(--color-green-tint-medium);
+  color: var(--color-ink);
 }
 
 .font-display {
