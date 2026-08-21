@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/Button";
 import { Chip } from "../components/ui/Chip";
 import { Logo } from "../components/ui/Logo";
+import { clearActiveDemoSession } from "../lib/demoSession";
 import { parseRequest, toProcurementRequest, type ParsedRequest } from "../lib/parseRequest";
 
 const DEMO_SENTENCE = "I need 1,030 bags of maize in Kaduna by Monday.";
@@ -53,7 +54,10 @@ export function CreateRequest() {
   }
 
   function handleConfirm() {
-    if (parsed) navigate("/results", { state: toProcurementRequest(parsed) });
+    if (parsed) {
+      clearActiveDemoSession();
+      navigate("/results", { state: toProcurementRequest(parsed) });
+    }
   }
 
   if (parsed) {

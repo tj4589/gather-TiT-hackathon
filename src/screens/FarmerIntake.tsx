@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowLeft, BatteryFull, CalendarDays, Check, ChevronRight, CircleCheck,
+  ArrowLeft, ArrowRight, BatteryFull, CalendarDays, Check, ChevronRight, CircleCheck,
   Coins, MapPin, Mic, MicOff, Package, Phone, Signal, Volume2, Wifi, X,
 } from "lucide-react";
 import { Logo } from "../components/ui/Logo";
 import { Button } from "../components/ui/Button";
 import { FeaturePhone } from "../components/FeaturePhone";
 import { DEMO_TRANSCRIPT, apiBaseUrl, interpretSupply, supplyPayload, type SupplyDraft } from "../lib/supplyInterpreter";
+import { useNavigate } from "react-router-dom";
 
 type Screen = "entry" | "call" | "understood" | "success";
 type CallPhase = "dialing" | "ringing" | "connected";
@@ -71,6 +72,7 @@ function SupplyCard({ draft }: { draft: SupplyDraft }) {
 }
 
 export function FarmerIntake() {
+  const navigate = useNavigate();
   const [screen, setScreen] = useState<Screen>("entry");
   const [callPhase, setCallPhase] = useState<CallPhase>("dialing");
   const [seconds, setSeconds] = useState(0);
@@ -148,7 +150,7 @@ export function FarmerIntake() {
 
         {screen === "understood" && draft && <section className="px-5 pb-8 pt-6"><CallHeader onEnd={endCall} /><div className="mt-8"><p className="text-[12px] font-medium uppercase tracking-[0.12em] text-green">Your harvest</p><h1 className="mt-2 font-display text-[32px] font-light leading-tight text-ink">Does this sound right?</h1></div><div className="mt-6 rounded-[10px] border border-neutral-200 bg-green-tint-subtle px-5 py-4"><p className="text-[12px] font-medium uppercase tracking-[0.1em] text-neutral-500">You said</p><p className="mt-2 text-[16px] italic leading-[1.45] text-ink">"{transcript}"</p></div><div className="mt-5"><SupplyCard draft={draft} /></div><Button onClick={confirmHarvest} className="mt-7 h-14 w-full text-[16px]"><Check size={19} /> Confirm harvest</Button><button onClick={beginCall} className="mt-4 flex w-full items-center justify-center gap-2 py-2 text-[14px] font-medium text-green hover:text-green-800"><ArrowLeft size={16} /> Say it again</button></section>}
 
-        {screen === "success" && draft && <section className="px-5 pb-8 pt-16 text-center"><div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green text-cream"><Check size={30} strokeWidth={2} /></div><h1 className="mt-7 font-display text-[34px] font-light leading-tight text-ink">Harvest shared.</h1><p className="mx-auto mt-3 max-w-[310px] text-[16px] leading-[1.5] text-neutral-500">{draft.quantity} bags of {draft.crop} have been added to Gather's supply network.</p><div className="mt-8 text-left"><SupplyCard draft={draft} /></div><div className="mt-5 flex items-start gap-3 rounded-[10px] border border-neutral-200 bg-cream px-4 py-4 text-left"><CircleCheck size={18} className="mt-0.5 shrink-0 text-green" /><p className="text-[13px] leading-[1.45] text-neutral-600">{submissionMode === "backend" ? "Added to Gather supply." : "Demo saved on this device. Connect the Gather API to publish it to the live supply network."}</p></div><Button variant="secondary" onClick={beginCall} className="mt-8 h-12 w-full"><Phone size={17} /> Call again</Button></section>}
+        {screen === "success" && draft && <section className="px-5 pb-8 pt-16 text-center"><div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green text-cream"><Check size={30} strokeWidth={2} /></div><h1 className="mt-7 font-display text-[34px] font-light leading-tight text-ink">Harvest shared.</h1><p className="mx-auto mt-3 max-w-[310px] text-[16px] leading-[1.5] text-neutral-500">{draft.quantity} bags of {draft.crop} have been added to Gather's supply network.</p><div className="mt-8 text-left"><SupplyCard draft={draft} /></div><div className={`mt-5 flex items-start gap-3 rounded-[10px] border px-4 py-4 text-left ${submissionMode === "backend" ? "border-green/30 bg-green-tint-subtle" : "border-gold/30 bg-gold-tint-subtle"}`}><CircleCheck size={18} className="mt-0.5 shrink-0 text-green" /><p className="text-[13px] font-semibold leading-[1.45] text-ink">{submissionMode === "backend" ? "Added to Gather supply network" : "Demo mode — not published to live supply"}</p></div><Button onClick={() => navigate("/results")} className="mt-8 h-14 w-full"><ArrowRight size={17} /> Return to buyer progress</Button><Button variant="secondary" onClick={beginCall} className="mt-3 h-12 w-full"><Phone size={17} /> Call again</Button></section>}
       </div>
     </main>
   );

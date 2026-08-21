@@ -10,7 +10,7 @@ import {
   Radio,
   Users,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
@@ -18,6 +18,7 @@ import { FulfillmentBar } from "../components/FulfillmentBar";
 import { SupplierBreakdown } from "../components/SupplierBreakdown";
 import { createDemand, getDemandStatus, getOrder } from "../lib/api";
 import { createDemoOrder, demoRequest, matchSuppliers } from "../lib/mockData";
+import { clearActiveDemoSession, readActiveDemoSession, saveActiveDemoSession } from "../lib/demoSession";
 import { useCountUp } from "../lib/useCountUp";
 import type { OrderSummary, ProcurementRequest } from "../lib/types";
 
@@ -81,12 +82,16 @@ function OrderSummaryCard({ order, request }: { order: OrderSummary; request: Pr
 
 export function ProcurementResults() {
   const location = useLocation();
-  const request = (location.state as ProcurementRequest) ?? demoRequest;
+  const locationStateRequest = location.state as ProcurementRequest | null;
+  const storedSession = readActiveDemoSession();
+  const [request] = useState<ProcurementRequest>(() => locationStateRequest ?? storedSession?.request ?? demoRequest);
   const [radiusKm, setRadiusKm] = useState(request.radiusKm);
   const [searching, setSearching] = useState(false);
-  const [demandId, setDemandId] = useState<string>();
+  const [demandId, setDemandId] = useState<string>(() => locationStateRequest ? "" : storedSession?.demandId ?? "");
   const [apiOrder, setApiOrder] = useState<OrderSummary>();
   const [showOrder, setShowOrder] = useState(false);
+  const initialDemandIdRef = useRef(demandId);
+  const startedRef = useRef(false);
 
   const { matched, totalBags, gapBags, percentFulfilled } = matchSuppliers(request, radiusKm);
   const animatedTotal = useCountUp(totalBags, 650);
@@ -96,18 +101,25 @@ export function ProcurementResults() {
   const order = apiOrder ?? createDemoOrder(request, matched);
 
   useEffect(() => {
-    let cancelled = false;
-    createDemand(request)
-      .then(({ id }) => {
-        if (!cancelled) setDemandId(id);
+    if (startedRef.current) return;
+    startedRef.current = true;
+    const applyStatus = (status: Awaited<ReturnType<typeof getDemandStatus>>) => {
+      const complete = (status.gathered ?? 0) >= request.quantityBags || status.remaining === 0 || status.status?.toLowerCase() === "fulfilled";
+      if (complete) setRadiusKm(EXPANDED_RADIUS_KM);
+    };
+    const existingDemandId = initialDemandIdRef.current;
+    const statusRequest = existingDemandId
+      ? getDemandStatus(existingDemandId)
+      : createDemand(request).then(({ id }) => {
+        saveActiveDemoSession(id, request);
+        setDemandId(id);
         return getDemandStatus(id);
-      })
+      });
+    statusRequest
       .then((status) => {
-        const complete = (status.gathered ?? 0) >= request.quantityBags || status.remaining === 0 || status.status?.toLowerCase() === "fulfilled";
-        if (!cancelled && complete) setRadiusKm(EXPANDED_RADIUS_KM);
+        applyStatus(status);
       })
       .catch(() => undefined);
-    return () => { cancelled = true; };
   }, [request]);
 
   useEffect(() => {
@@ -150,7 +162,7 @@ export function ProcurementResults() {
   return (
     <main className="mx-auto max-w-5xl px-6 py-8 sm:py-12">
       <div className="flex flex-wrap items-center justify-between gap-5">
-        <Link to="/" className="inline-flex items-center gap-2 text-[13px] font-medium text-neutral-500 transition-colors hover:text-ink"><ArrowLeft size={15} strokeWidth={1.8} />New request</Link>
+        <Link to="/" onClick={clearActiveDemoSession} className="inline-flex items-center gap-2 text-[13px] font-medium text-neutral-500 transition-colors hover:text-ink"><ArrowLeft size={15} strokeWidth={1.8} />New request</Link>
         <JourneySteps fulfilled={fulfilled} />
       </div>
 
