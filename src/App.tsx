@@ -1,13 +1,22 @@
-import { Routes, Route, useLocation } from "react-router-dom";
+import { Routes, Route, useLocation, Link } from "react-router-dom";
 import { Logo } from "./components/ui/Logo";
 import { CreateRequest } from "./screens/CreateRequest";
 import { ProcurementResults } from "./screens/ProcurementResults";
+import { FarmerIntake } from "./screens/FarmerIntake";
 
 function Nav() {
   return (
     <header className="border-b border-neutral-200">
-      <div className="mx-auto max-w-6xl px-6 py-4">
-        <Logo variant="nav" height={26} />
+      <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+        <Link to="/">
+          <Logo variant="nav" height={26} />
+        </Link>
+        <Link
+          to="/farmer"
+          className="text-[13px] font-medium text-neutral-500 hover:text-ink"
+        >
+          Farmer intake →
+        </Link>
       </div>
     </header>
   );
@@ -23,6 +32,7 @@ function App() {
       <Routes>
         <Route path="/" element={<CreateRequest />} />
         <Route path="/results" element={<ProcurementResults />} />
+        <Route path="/farmer" element={<FarmerIntake />} />
       </Routes>
     </div>
   );
