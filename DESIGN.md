@@ -78,15 +78,21 @@ gold-tint-soft    #F3E8D4
 
 ## Typography
 
-- **Display / editorial serif — used only for large numerals and page-level
-  headlines**: **Fraunces** (variable, optical size "soft"/9pt axis dialed
-  toward its warmer, rounded cuts). This is a deliberate contrast choice
-  against the geometric-sans logo — large stat numbers ("1,000 bags", "72%")
-  get an editorial serif to read as premium data, not as more UI chrome. It
-  is never used for body copy, labels, or buttons.
-- **Body / UI sans**: **Figtree** — a humanist sans with genuinely rounded
-  terminals, echoing the wordmark's roundness without imitating it directly.
-  Used for all UI text: nav, labels, buttons, table cells, form inputs.
+> Amended: the wordmark's actual letterforms are a geometric/rounded sans
+> (see Brand asset analysis above) — **Quicksand** is that same family of
+> construction (circular bowls, low contrast, soft terminals), so it
+> replaces the earlier serif-display idea directly rather than contrasting
+> against it. Numbers are carved out from Quicksand explicitly, per rule:
+
+- **Display — Quicksand (Light weight)**: the "gather" wordmark and
+  large page-level headings ONLY. Never used for body text, labels, tables,
+  or any numeric value.
+- **Body / data — Figtree**: a neutral, high-legibility humanist sans. Used
+  for all UI text (nav, labels, buttons, form inputs) **and for every
+  numeric value without exception** — bag counts, percentages, prices,
+  fulfillment figures, including the large hero stat numbers on the
+  procurement results screen. Quicksand Light is too thin for data at any
+  size; the wordmark is soft, the data is sturdy.
 - **Tabular figures**: `font-variant-numeric: tabular-nums` on every price,
   quantity, percentage, and count so columns of numbers align. Non-negotiable
   on the procurement results / supplier breakdown screens.
@@ -94,9 +100,9 @@ gold-tint-soft    #F3E8D4
 
 Scale (1.25 ratio, base 16px):
 ```
-display-xl   56px / 1.05   Fraunces, 480  — hero stat (e.g. "720")
-display-lg   40px / 1.1    Fraunces, 480  — section hero numbers
-heading-lg   28px / 1.2    Figtree, 600   — page titles
+display-xl   56px / 1.05   Figtree, 700, tabular-nums — hero stat (e.g. "720")
+display-lg   40px / 1.1    Quicksand, 300 — large section headings (non-numeric)
+heading-lg   28px / 1.2    Quicksand, 500 — page titles
 heading-md   20px / 1.3    Figtree, 600   — section titles
 body-lg      17px / 1.5    Figtree, 400
 body         15px / 1.5    Figtree, 400   — default UI text
@@ -123,6 +129,19 @@ especially around the hero fulfillment metric.
   toast) — never on cards sitting in normal page flow.
 - **Icons**: single stroke weight (1.5px), rounded line caps/joins to match
   the logomark's stroke quality, one library only (Lucide). No emoji as UI icons.
+
+## Design direction tiebreaker
+
+Any "Bauhaus-influenced" instruction means a disciplined grid, clear
+geometric proportion, and strong typographic hierarchy — **not** visible
+decorative shapes, primary-color blocks, or geometric ornament. Where a
+flourish would add visual noise, cut it. Restraint wins every tie.
+
+## Entry flow
+
+No login/auth screen. The buyer lands directly on "What do you want to buy?"
+(the create-procurement-request screen). Buyer/farmer identity is mocked,
+never a real authentication flow.
 
 ## Motion
 
