@@ -1,9 +1,11 @@
 export function Logo({
   variant = "nav",
   height = 28,
+  className = "",
 }: {
   variant?: "nav" | "mark" | "hero";
   height?: number;
+  className?: string;
 }) {
   if (variant === "mark") {
     return (
@@ -11,7 +13,7 @@ export function Logo({
         src="/favicon.png"
         alt="gather"
         style={{ height, width: height }}
-        className="shrink-0"
+        className={`shrink-0 ${className}`}
       />
     );
   }
@@ -22,13 +24,13 @@ export function Logo({
         src="/logo-lockup.png"
         alt="gather — small harvest. serious supply."
         style={{ height: height * 4 }}
-        className="shrink-0"
+        className={`shrink-0 ${className}`}
       />
     );
   }
 
   return (
-    <span className="inline-flex items-center gap-2 shrink-0">
+    <span className={`inline-flex items-center gap-2 shrink-0 ${className}`}>
       <img src="/favicon.png" alt="" style={{ height, width: height }} />
       <span
         className="font-display font-light text-ink"

@@ -60,6 +60,23 @@ input {
   font-variant-numeric: tabular-nums;
 }
 
+.entry-hero-logo {
+  height: 88px !important;
+  width: auto;
+}
+
+@media (min-width: 640px) {
+  .entry-hero-logo {
+    height: 104px !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  .entry-hero-logo {
+    height: 112px !important;
+  }
+}
+
 /* voice-level bars on the farmer's feature phone */
 @keyframes voice {
   0%,
