@@ -158,7 +158,9 @@ def _fulfill(demand, supplies):
     existing_order = Order.query.filter_by(demand_id=demand.id).first()
     if existing_order:
         demand.status = "fulfilled"
-        return _order_result(demand, existing_order)
+        result = _order_result(demand, existing_order)
+        result["farmers_to_notify"] = 0
+        return result
 
     preview = _preview(demand, supplies)
     if preview["status"] != "fulfilled":
@@ -197,7 +199,9 @@ def _fulfill(demand, supplies):
     order.total_value = total_value
     demand.status = "fulfilled"
     db.session.commit()
-    return _order_result(demand, order)
+    result = _order_result(demand, order)
+    result["farmers_to_notify"] = 0
+    return result
 
 
 def gather_demand(demand):
@@ -249,6 +253,8 @@ def order_detail(order):
                 "allocation_id": allocation.id,
                 "supply_id": allocation.supply_id,
                 "farmer_id": allocation.supply.farmer_id,
+                "farmer_name": allocation.supply.farmer.name,
+                "location": allocation.supply.location,
                 "allocated_quantity": _number(allocation.allocated_quantity),
                 "price_per_unit": _number(allocation.price_per_unit),
             }

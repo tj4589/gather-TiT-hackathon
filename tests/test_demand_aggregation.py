@@ -110,6 +110,8 @@ def test_fulfillment_creates_one_order_and_exact_allocations(client, app):
     order_response = client.get(f"/api/orders/{created['order_id']}")
     assert order_response.status_code == 200
     assert sum(item["allocated_quantity"] for item in order_response.json["allocations"]) == 500
+    assert order_response.json["allocations"][0]["farmer_name"] == "Amina Yusuf"
+    assert order_response.json["allocations"][0]["location"] == "Kaduna"
 
     with app.app_context():
         assert Order.query.count() == 1
@@ -223,7 +225,7 @@ def test_canonical_demo_progresses_from_720_to_1030(client, app):
     arrival = supply(client, historical_farmers[0]["id"], quantity=310, price_per_unit=42000)
     result = client.get(f"/api/demands/{created['demand_id']}/status").json
     assert result["status"] == "fulfilled"
-    assert (result["gathered"], result["remaining"], result["percentage"]) == (1030, 0, 100)
+    assert (result["gathered"], result["remaining"], result["percentage"], result["farmers_to_notify"]) == (1030, 0, 100, 0)
     assert result["order_id"]
     with app.app_context():
         assert sum(allocation.allocated_quantity for allocation in Allocation.query.all()) == 1030
