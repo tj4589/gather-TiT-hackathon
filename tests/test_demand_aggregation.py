@@ -189,3 +189,42 @@ def test_find_previous_suppliers_excludes_contributors(app):
         db.session.add(demand_record)
         db.session.commit()
         assert [candidate.id for candidate in find_previous_suppliers(demand_record)] == [historical.id]
+
+
+def test_canonical_demo_progresses_from_720_to_1030(client, app):
+    current_farmers = [
+        farmer(client, "NDFR-001", "08030000001"),
+        farmer(client, "NDFR-002", "08030000002"),
+        farmer(client, "NDFR-003", "08030000003"),
+        farmer(client, "NDFR-004", "08030000004"),
+    ]
+    historical_farmers = [
+        farmer(client, "NDFR-005", "08030000005"),
+        farmer(client, "NDFR-006", "08030000006"),
+        farmer(client, "NDFR-007", "08030000007"),
+    ]
+    b = buyer(client)
+    for record, quantity in zip(current_farmers, (120, 180, 220, 200)):
+        supply(client, record["id"], quantity=quantity)
+    with app.app_context():
+        db.session.add_all([
+            Supply(
+                farmer_id=record["id"], crop="maize", unit="bags", quantity=300,
+                available_quantity=0, price_per_unit=39500, location="Kaduna",
+                available_date=date(2026, 7, 1), status="exhausted",
+            )
+            for record in historical_farmers
+        ])
+        db.session.commit()
+
+    created = demand(client, b["id"], quantity=1030)
+    assert (created["gathered"], created["remaining"], created["farmers_to_notify"]) == (720, 310, 3)
+
+    arrival = supply(client, historical_farmers[0]["id"], quantity=310, price_per_unit=42000)
+    result = client.get(f"/api/demands/{created['demand_id']}/status").json
+    assert result["status"] == "fulfilled"
+    assert (result["gathered"], result["remaining"], result["percentage"]) == (1030, 0, 100)
+    assert result["order_id"]
+    with app.app_context():
+        assert sum(allocation.allocated_quantity for allocation in Allocation.query.all()) == 1030
+        assert db.session.get(Supply, arrival["id"]).status == "exhausted"

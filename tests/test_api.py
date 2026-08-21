@@ -8,6 +8,19 @@ def test_health(client):
     assert response.json == {"status": "ok"}
 
 
+def test_local_vite_cors_headers(client):
+    response = client.options(
+        "/api/demands",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers["Access-Control-Allow-Origin"] == "http://localhost:5173"
+    assert "POST" in response.headers["Access-Control-Allow-Methods"]
+
+
 def test_farmer_registration_requires_matching_phone(client):
     invalid = client.post("/api/farmers/register", json={"ndfr_id": "NDFR-001", "calling_phone": "08000000000"})
     assert invalid.status_code == 400
@@ -36,4 +49,3 @@ def test_supply_service_defaults_available_quantity(client, app):
     with app.app_context():
         supply = db.session.get(Supply, response.json["id"])
         assert supply.status == "available"
-
