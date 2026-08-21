@@ -1,20 +1,44 @@
 import { useEffect, useRef, useState } from "react";
-import { Phone, CheckCircle2 } from "lucide-react";
 import { Button } from "../components/ui/Button";
-import { Logo } from "../components/ui/Logo";
+import { FeaturePhone } from "../components/FeaturePhone";
 import { callScript, capturedSupply, type CallLine } from "../lib/farmerScript";
 
-type CallState = "idle" | "ringing" | "connected" | "ended";
+type CallState = "idle" | "dialing" | "ringing" | "connected" | "ended";
 
 function speakingDelay(text: string) {
-  return Math.min(2200, Math.max(900, 500 + text.length * 30));
+  return Math.min(2400, Math.max(1000, 600 + text.length * 32));
+}
+
+/** Animated voice level bars — the only "UI" during a voice call. */
+function VoiceBars({ active }: { active: boolean }) {
+  return (
+    <div className="flex h-6 items-end justify-center gap-[3px]">
+      {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+        <span
+          key={i}
+          className={`w-[3px] rounded-sm bg-[#3d4a38] transition-all duration-200 ${
+            active ? "animate-[voice_0.6s_ease-in-out_infinite]" : "h-[3px]"
+          }`}
+          style={
+            active
+              ? {
+                  animationDelay: `${i * 80}ms`,
+                  height: `${8 + ((i * 7) % 16)}px`,
+                }
+              : undefined
+          }
+        />
+      ))}
+    </div>
+  );
 }
 
 export function FarmerIntake() {
   const [callState, setCallState] = useState<CallState>("idle");
-  const [visibleLines, setVisibleLines] = useState<CallLine[]>([]);
+  const [lineIndex, setLineIndex] = useState(-1);
   const [speaker, setSpeaker] = useState<CallLine["speaker"] | null>(null);
   const [seconds, setSeconds] = useState(0);
+  const [dialed, setDialed] = useState("");
 
   const timeouts = useRef<number[]>([]);
   const interval = useRef<number | undefined>(undefined);
@@ -41,19 +65,20 @@ export function FarmerIntake() {
         clearAllTimers();
         setCallState("ended");
         setSpeaker(null);
-      }, 800);
+        setLineIndex(-1);
+      }, 900);
       timeouts.current.push(t);
       return;
     }
 
     const line = callScript[index];
+    setLineIndex(index);
     setSpeaker(line.speaker);
 
     const t = window.setTimeout(() => {
       if (cancelled.current) return;
-      setVisibleLines((prev) => [...prev, line]);
       setSpeaker(null);
-      const gap = window.setTimeout(() => playLine(index + 1), 450);
+      const gap = window.setTimeout(() => playLine(index + 1), 350);
       timeouts.current.push(gap);
     }, speakingDelay(line.text));
     timeouts.current.push(t);
@@ -61,11 +86,28 @@ export function FarmerIntake() {
 
   function startCall() {
     cancelled.current = false;
-    setVisibleLines([]);
     setSeconds(0);
-    setCallState("ringing");
+    setLineIndex(-1);
+    setDialed("");
+    setCallState("dialing");
 
-    const ringTimeout = window.setTimeout(() => {
+    // type the number out on the keypad
+    const number = "*247#";
+    number.split("").forEach((_, i) => {
+      const t = window.setTimeout(() => {
+        if (cancelled.current) return;
+        setDialed(number.slice(0, i + 1));
+      }, 220 * (i + 1));
+      timeouts.current.push(t);
+    });
+
+    const ring = window.setTimeout(() => {
+      if (cancelled.current) return;
+      setCallState("ringing");
+    }, 220 * number.length + 400);
+    timeouts.current.push(ring);
+
+    const connect = window.setTimeout(() => {
       if (cancelled.current) return;
       setCallState("connected");
       interval.current = window.setInterval(
@@ -73,149 +115,179 @@ export function FarmerIntake() {
         1000
       );
       playLine(0);
-    }, 1100);
-    timeouts.current.push(ringTimeout);
+    }, 220 * number.length + 1900);
+    timeouts.current.push(connect);
   }
 
   function resetCall() {
     cancelled.current = true;
     clearAllTimers();
     setCallState("idle");
-    setVisibleLines([]);
     setSpeaker(null);
+    setLineIndex(-1);
     setSeconds(0);
+    setDialed("");
   }
 
   const duration = `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(
     seconds % 60
   ).padStart(2, "0")}`;
 
+  const currentLine = lineIndex >= 0 ? callScript[lineIndex] : null;
+
   return (
-    <main className="mx-auto flex min-h-[calc(100vh-73px)] max-w-md flex-col items-center px-6 py-14 text-center">
-      <Logo variant="mark" height={44} />
+    <main className="mx-auto max-w-4xl px-6 py-14">
+      <div className="text-center">
+        <h1 className="font-display text-[32px] font-light leading-[1.2] text-ink">
+          No smartphone required
+        </h1>
+        <p className="mx-auto mt-3 max-w-md text-[15px] text-neutral-500">
+          A farmer dials a short code from any phone and speaks. gather
+          listens, confirms, and adds the supply to the network.
+        </p>
+      </div>
 
-      <h1 className="font-display mt-6 text-[28px] font-light leading-[1.2] text-ink">
-        Add supply by phone
-      </h1>
-      <p className="mt-2 text-[15px] text-neutral-500">
-        No app required — a farmer just calls and talks.
-      </p>
-
-      {/* idle */}
-      {callState === "idle" && (
-        <div className="mt-12 flex flex-col items-center gap-6">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-tint-soft">
-            <Phone size={26} strokeWidth={1.5} className="text-green-800" />
-          </div>
-          <Button onClick={startCall}>Call gather</Button>
-        </div>
-      )}
-
-      {/* ringing / connected / ended */}
-      {callState !== "idle" && (
-        <div className="mt-10 w-full">
-          <div className="flex items-center justify-center gap-2 text-[13px] font-medium text-neutral-500">
-            {callState === "ringing" && <span>Calling gather…</span>}
-            {callState === "connected" && (
-              <>
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-green" />
+      <div className="mt-12 grid items-start gap-12 md:grid-cols-[280px_1fr] md:justify-center">
+        {/* the phone */}
+        <FeaturePhone keypadGlow={callState === "dialing"}>
+          {callState === "idle" && (
+            <div className="flex h-full flex-col">
+              <div className="flex items-center justify-between text-[9px] font-medium text-[#3d4a38]">
+                <span>▮▮▮</span>
                 <span>gather</span>
-                <span className="tabular-nums">· {duration}</span>
-              </>
-            )}
-            {callState === "ended" && <span>Call ended · {duration}</span>}
-          </div>
-
-          {/* transcript */}
-          <div className="mt-8 flex flex-col gap-5 text-left">
-            {visibleLines.map((line, i) => (
-              <div key={i}>
-                <p
-                  className={`text-[12px] font-semibold uppercase tracking-[0.04em] ${
-                    line.speaker === "gather"
-                      ? "text-green-800"
-                      : "text-neutral-400"
-                  }`}
-                >
-                  {line.speaker === "gather" ? "gather" : "Farmer"}
-                </p>
-                <p className="mt-1 text-[17px] leading-[1.5] text-ink">
-                  {line.text}
+                <span className="tabular-nums">▮</span>
+              </div>
+              <div className="flex flex-1 flex-col items-center justify-center gap-1">
+                <p className="text-[11px] text-[#3d4a38]">Dial</p>
+                <p className="tabular-nums text-[22px] font-semibold tracking-[0.08em] text-[#26301f]">
+                  *247#
                 </p>
               </div>
-            ))}
+              <p className="text-center text-[9px] text-[#4d5a48]">
+                Standard call rates apply
+              </p>
+            </div>
+          )}
 
-            {speaker && (
-              <div>
-                <p
-                  className={`text-[12px] font-semibold uppercase tracking-[0.04em] ${
-                    speaker === "gather" ? "text-green-800" : "text-neutral-400"
-                  }`}
-                >
-                  {speaker === "gather" ? "gather" : "Farmer"}
+          {callState === "dialing" && (
+            <div className="flex h-full flex-col items-center justify-center">
+              <p className="tabular-nums text-[26px] font-semibold tracking-[0.1em] text-[#26301f]">
+                {dialed}
+                <span className="animate-pulse">|</span>
+              </p>
+            </div>
+          )}
+
+          {callState === "ringing" && (
+            <div className="flex h-full flex-col items-center justify-center gap-2">
+              <p className="text-[15px] font-semibold text-[#26301f]">gather</p>
+              <p className="text-[11px] text-[#3d4a38]">Calling…</p>
+            </div>
+          )}
+
+          {callState === "connected" && (
+            <div className="flex h-full flex-col">
+              <div className="flex items-center justify-between text-[9px] font-medium text-[#3d4a38]">
+                <span>gather</span>
+                <span className="tabular-nums">{duration}</span>
+              </div>
+
+              <div className="flex flex-1 flex-col items-center justify-center gap-3 px-1">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[#4d5a48]">
+                  {speaker === "farmer" ? "You" : "gather"}
                 </p>
-                <div className="mt-2 flex gap-1">
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-neutral-300 [animation-delay:0ms]" />
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-neutral-300 [animation-delay:150ms]" />
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-neutral-300 [animation-delay:300ms]" />
-                </div>
+                <VoiceBars active={!!speaker} />
+                {currentLine && (
+                  <p className="text-center text-[12px] leading-[1.45] text-[#26301f]">
+                    {currentLine.speaker === "farmer" ? "" : ""}
+                    {currentLine.text}
+                  </p>
+                )}
               </div>
-            )}
-          </div>
 
-          {/* supply added */}
-          {callState === "ended" && (
-            <div className="mt-10 rounded-[10px] border border-neutral-200 px-6 py-6">
-              <div className="flex items-center justify-center gap-2 text-green-800">
-                <CheckCircle2 size={20} strokeWidth={1.5} />
-                <span className="text-[15px] font-semibold">Supply added</span>
-              </div>
-              <div className="mt-5 grid grid-cols-2 gap-4 text-left">
-                <div>
-                  <p className="text-[12px] font-medium uppercase tracking-[0.04em] text-neutral-400">
-                    Crop
-                  </p>
-                  <p className="text-[15px] font-medium text-ink">
-                    {capturedSupply.crop}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[12px] font-medium uppercase tracking-[0.04em] text-neutral-400">
-                    Quantity
-                  </p>
-                  <p className="tabular-nums text-[15px] font-medium text-ink">
-                    {capturedSupply.bags} bags
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[12px] font-medium uppercase tracking-[0.04em] text-neutral-400">
-                    Location
-                  </p>
-                  <p className="text-[15px] font-medium text-ink">
-                    {capturedSupply.location}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[12px] font-medium uppercase tracking-[0.04em] text-neutral-400">
-                    Availability
-                  </p>
-                  <p className="text-[15px] font-medium text-ink">
-                    {capturedSupply.availability}
-                  </p>
-                </div>
-              </div>
+              <p className="text-center text-[9px] text-[#4d5a48]">
+                Voice · English
+              </p>
             </div>
           )}
 
           {callState === "ended" && (
-            <div className="mt-8">
+            <div className="flex h-full flex-col">
+              <div className="flex items-center justify-between text-[9px] font-medium text-[#3d4a38]">
+                <span>gather</span>
+                <span className="tabular-nums">{duration}</span>
+              </div>
+              <div className="flex flex-1 flex-col items-center justify-center gap-2">
+                <p className="text-[11px] text-[#3d4a38]">Call ended</p>
+                <div className="w-full rounded-[4px] border border-[#8fa382] px-2 py-2 text-center">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#4d5a48]">
+                    Supply added
+                  </p>
+                  <p className="tabular-nums mt-1 text-[13px] font-semibold text-[#26301f]">
+                    {capturedSupply.bags} bags · {capturedSupply.crop}
+                  </p>
+                  <p className="text-[10px] text-[#3d4a38]">
+                    {capturedSupply.location} · tomorrow
+                  </p>
+                </div>
+                <p className="text-[9px] text-[#4d5a48]">SMS confirmation sent</p>
+              </div>
+            </div>
+          )}
+        </FeaturePhone>
+
+        {/* what gather captured, alongside */}
+        <div className="flex flex-col">
+          <p className="text-[12px] font-semibold uppercase tracking-[0.06em] text-neutral-400">
+            What gather captured
+          </p>
+
+          <div className="mt-4 flex flex-col divide-y divide-neutral-200 border-y border-neutral-200">
+            {[
+              ["Crop", capturedSupply.crop],
+              ["Quantity", `${capturedSupply.bags} bags`],
+              ["Location", capturedSupply.location],
+              ["Availability", capturedSupply.availability],
+            ].map(([label, value], i) => {
+              // reveal each field as the call reaches it
+              const revealedAt = [1, 1, 3, 5];
+              const revealed =
+                callState === "ended" || lineIndex >= revealedAt[i];
+              return (
+                <div
+                  key={label}
+                  className="flex items-center justify-between py-3"
+                >
+                  <span className="text-[13px] text-neutral-500">{label}</span>
+                  <span
+                    className={`tabular-nums text-[15px] font-medium transition-opacity duration-300 ${
+                      revealed
+                        ? "text-ink opacity-100"
+                        : "text-neutral-300 opacity-40"
+                    }`}
+                  >
+                    {revealed ? value : "—"}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="mt-8">
+            {callState === "idle" && (
+              <Button onClick={startCall}>Play the call</Button>
+            )}
+            {callState === "ended" && (
               <Button variant="secondary" onClick={resetCall}>
-                Simulate another call
+                Play again
               </Button>
-            </div>
-          )}
+            )}
+            {callState !== "idle" && callState !== "ended" && (
+              <p className="text-[13px] text-neutral-400">Call in progress…</p>
+            )}
+          </div>
         </div>
-      )}
+      </div>
     </main>
   );
 }

@@ -2,7 +2,7 @@ import { chromium } from "playwright";
 
 const out = process.argv[2] || ".";
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 480, height: 900 } });
+const page = await browser.newPage({ viewport: { width: 1000, height: 820 } });
 
 const errors = [];
 page.on("pageerror", (e) => errors.push(String(e)));
@@ -10,21 +10,24 @@ page.on("pageerror", (e) => errors.push(String(e)));
 await page.goto("http://localhost:5173/farmer", {
   waitUntil: "domcontentloaded",
 });
-await page.waitForSelector("text=Add supply by phone");
-await page.screenshot({ path: `${out}/farmer-idle.png` });
+await page.waitForSelector("text=No smartphone required");
+await page.waitForTimeout(600);
+await page.screenshot({ path: `${out}/phone-idle.png` });
 
-await page.click('button:has-text("Call gather")');
+await page.click('button:has-text("Play the call")');
 
-// mid-call: wait until the farmer has answered at least once
-await page.waitForSelector("text=I have 120 bags of maize.", {
-  timeout: 15000,
-});
-await page.screenshot({ path: `${out}/farmer-call.png` });
+// dialing
+await page.waitForTimeout(900);
+await page.screenshot({ path: `${out}/phone-dialing.png` });
 
-// end state
-await page.waitForSelector("text=Supply added", { timeout: 30000 });
-await page.waitForTimeout(300);
-await page.screenshot({ path: `${out}/farmer-done.png`, fullPage: true });
+// mid-call
+await page.waitForSelector("text=I have 120 bags of maize.", { timeout: 20000 });
+await page.screenshot({ path: `${out}/phone-call.png` });
+
+// end
+await page.waitForSelector("text=SMS confirmation sent", { timeout: 40000 });
+await page.waitForTimeout(400);
+await page.screenshot({ path: `${out}/phone-done.png` });
 
 console.log("errors:", errors);
 console.log("SCREENSHOT_OK");
