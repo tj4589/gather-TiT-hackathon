@@ -64,6 +64,10 @@ class Demand(db.Model):
 
 
 class Order(db.Model):
+    __table_args__ = (
+        db.UniqueConstraint("demand_id", name="uq_order_demand_id"),
+    )
+
     id = db.Column(db.Integer, primary_key=True)
     demand_id = db.Column(db.Integer, db.ForeignKey("demand.id"), nullable=False, index=True)
     quantity = db.Column(db.Float, nullable=False)
@@ -75,6 +79,10 @@ class Order(db.Model):
 
 
 class Allocation(db.Model):
+    __table_args__ = (
+        db.UniqueConstraint("order_id", "supply_id", name="uq_allocation_order_supply"),
+    )
+
     id = db.Column(db.Integer, primary_key=True)
     order_id = db.Column(db.Integer, db.ForeignKey("order.id"), nullable=False, index=True)
     supply_id = db.Column(db.Integer, db.ForeignKey("supply.id"), nullable=False, index=True)
@@ -82,4 +90,3 @@ class Allocation(db.Model):
     price_per_unit = db.Column(db.Float, nullable=False)
     order = db.relationship("Order", back_populates="allocations")
     supply = db.relationship("Supply", back_populates="allocations")
-
