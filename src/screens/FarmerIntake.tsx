@@ -72,7 +72,7 @@ function SupplyCard({ draft }: { draft: SupplyDraft }) {
   );
 }
 
-export function FarmerCall() {
+export function FarmerIntake() {
   const [screen, setScreen] = useState<Screen>("entry");
   const [seconds, setSeconds] = useState(0);
   const [isListening, setIsListening] = useState(false);
