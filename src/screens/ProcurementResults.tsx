@@ -58,8 +58,9 @@ function OrderSummaryCard({ order, request }: { order: OrderSummary; request: Pr
         <Badge tone="green"><CheckCircle2 size={14} strokeWidth={2} />Fulfilled</Badge>
       </div>
 
-      <div className="mt-7 grid gap-4 sm:grid-cols-3">
+      <div className={`mt-7 grid gap-4 ${order.totalValue !== undefined ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
         <div className="rounded-[10px] border border-neutral-200 bg-white/30 p-5"><span className="text-[12px] font-medium uppercase tracking-[0.04em] text-neutral-400">Total order</span><p className="mt-2 tabular-nums text-[26px] font-semibold text-ink">{order.totalBags.toLocaleString()} <span className="text-[15px] font-medium text-neutral-500">bags</span></p></div>
+        {order.totalValue !== undefined && <div className="rounded-[10px] border border-neutral-200 bg-white/30 p-5"><span className="text-[12px] font-medium uppercase tracking-[0.04em] text-neutral-400">Total value</span><p className="mt-2 tabular-nums text-[20px] font-semibold text-ink">₦{order.totalValue.toLocaleString()}</p></div>}
         <div className="rounded-[10px] border border-neutral-200 bg-white/30 p-5"><span className="text-[12px] font-medium uppercase tracking-[0.04em] text-neutral-400">Delivery to</span><p className="mt-2 flex items-center gap-2 text-[17px] font-semibold text-ink"><MapPin size={17} className="text-green" strokeWidth={1.7} />{order.deliveryLocation}</p></div>
         <div className="rounded-[10px] border border-neutral-200 bg-white/30 p-5"><span className="text-[12px] font-medium uppercase tracking-[0.04em] text-neutral-400">Ready within</span><p className="mt-2 flex items-center gap-2 text-[17px] font-semibold text-ink"><Clock3 size={17} className="text-green" strokeWidth={1.7} />{order.readyByDays} days</p></div>
       </div>

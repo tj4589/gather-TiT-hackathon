@@ -132,6 +132,7 @@ export async function getOrder(id: string): Promise<OrderSummary> {
     crop: response.crop ?? "Maize",
     grade: response.grade ?? "Grade A",
     totalBags: response.quantity ?? response.total_quantity ?? allocations.reduce((sum, allocation) => sum + allocation.contributedBags, 0),
+    totalValue: response.total_value,
     deliveryLocation: response.delivery_location ?? "Kaduna",
     readyByDays: Math.max(0, ...allocations.map((allocation) => allocation.readyInDays)),
     suppliers: allocations,

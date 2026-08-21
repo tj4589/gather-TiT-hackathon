@@ -34,6 +34,7 @@ export interface OrderSummary {
   crop: Crop;
   grade: Grade;
   totalBags: number;
+  totalValue?: number;
   deliveryLocation: string;
   readyByDays: number;
   suppliers: MatchedSupplier[];
