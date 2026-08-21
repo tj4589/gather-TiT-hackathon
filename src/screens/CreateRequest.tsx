@@ -1,61 +1,88 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/Button";
-import { demoRequest } from "../lib/mockData";
-import type { Crop, Grade, ProcurementRequest } from "../lib/types";
+import { Chip } from "../components/ui/Chip";
+import { Logo } from "../components/ui/Logo";
+import {
+  parseRequest,
+  toProcurementRequest,
+  type ParsedRequest,
+} from "../lib/parseRequest";
 
-const CROPS: Crop[] = ["Maize", "Rice", "Tomatoes", "Cassava", "Soybeans"];
-const GRADES: Grade[] = ["Grade A", "Grade B"];
+const CROPS = ["Maize", "Rice", "Tomatoes", "Cassava", "Soybeans"] as const;
 const LOCATIONS = ["Kaduna", "Kano", "Benue", "Ogun", "Oyo", "Niger"];
+const WEEKDAYS = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
 
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-2">
-      <span className="text-[13px] font-medium tracking-[0.01em] text-neutral-500">
-        {label}
-      </span>
-      {children}
-    </label>
-  );
-}
-
-const inputClass =
-  "w-full rounded-[10px] border border-neutral-200 bg-cream px-4 py-3 text-[15px] text-ink outline-none transition-colors focus:border-green";
+type EditingField = "crop" | "quantity" | "location" | "deadline" | null;
 
 export function CreateRequest() {
   const navigate = useNavigate();
-  const [request, setRequest] = useState<ProcurementRequest>(demoRequest);
+  const [text, setText] = useState("");
+  const [parsed, setParsed] = useState<ParsedRequest | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [editingField, setEditingField] = useState<EditingField>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    navigate("/results", { state: request });
+    if (!text.trim()) return;
+    const result = parseRequest(text);
+    if (!result) {
+      setError(
+        "Couldn't quite catch that — mention a crop, a quantity, and a location."
+      );
+      return;
+    }
+    setError(null);
+    setParsed(result);
   }
 
-  return (
-    <main className="mx-auto max-w-2xl px-6 py-16">
-      <h1 className="font-display font-light text-[40px] leading-[1.1] text-ink">
-        What do you want to buy?
-      </h1>
-      <p className="mt-3 text-[17px] text-neutral-500">
-        Tell us what you need. We'll assemble it from fragmented supply
-        across the network.
-      </p>
+  function updateParsed(patch: Partial<ParsedRequest>) {
+    if (!parsed) return;
+    setParsed({ ...parsed, ...patch });
+    setEditingField(null);
+  }
 
-      <form onSubmit={handleSubmit} className="mt-10 flex flex-col gap-6">
-        <div className="grid grid-cols-2 gap-5">
-          <Field label="Crop">
+  function setDeadlineFromWeekday(weekday: string) {
+    const idx = WEEKDAYS.findIndex((w) => w === weekday);
+    const today = new Date();
+    const days = (idx - today.getDay() + 7) % 7;
+    updateParsed({ deadlineDays: days, deadlineLabel: weekday });
+  }
+
+  function handleConfirm() {
+    if (!parsed) return;
+    navigate("/results", { state: toProcurementRequest(parsed) });
+  }
+
+  // ---- step 2: parsed interpretation ----
+  if (parsed) {
+    return (
+      <main className="mx-auto flex min-h-screen max-w-2xl flex-col items-center justify-center px-6 py-16 text-center">
+        <Logo variant="hero" height={26} />
+
+        <h1 className="font-display mt-8 text-[32px] font-light leading-[1.2] text-ink">
+          Here's what we heard
+        </h1>
+
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+          {editingField === "crop" ? (
             <select
-              className={inputClass}
-              value={request.crop}
+              autoFocus
+              className="rounded-[6px] border border-green bg-cream px-3 py-1.5 text-[14px] font-semibold uppercase text-ink outline-none"
+              value={parsed.crop}
               onChange={(e) =>
-                setRequest({ ...request, crop: e.target.value as Crop })
+                updateParsed({ crop: e.target.value as ParsedRequest["crop"] })
               }
+              onBlur={() => setEditingField(null)}
             >
               {CROPS.map((c) => (
                 <option key={c} value={c}>
@@ -63,48 +90,41 @@ export function CreateRequest() {
                 </option>
               ))}
             </select>
-          </Field>
+          ) : (
+            <Chip onClick={() => setEditingField("crop")}>{parsed.crop}</Chip>
+          )}
 
-          <Field label="Grade">
-            <select
-              className={inputClass}
-              value={request.grade}
-              onChange={(e) =>
-                setRequest({ ...request, grade: e.target.value as Grade })
+          {editingField === "quantity" ? (
+            <input
+              autoFocus
+              type="number"
+              min={1}
+              className="tabular-nums w-32 rounded-[6px] border border-green bg-cream px-3 py-1.5 text-[14px] font-semibold text-ink outline-none"
+              defaultValue={parsed.quantityBags}
+              onBlur={(e) =>
+                updateParsed({
+                  quantityBags: Number(e.target.value) || parsed.quantityBags,
+                })
               }
-            >
-              {GRADES.map((g) => (
-                <option key={g} value={g}>
-                  {g}
-                </option>
-              ))}
-            </select>
-          </Field>
-        </div>
+            />
+          ) : (
+            <Chip onClick={() => setEditingField("quantity")}>
+              <span className="tabular-nums">
+                {parsed.quantityBags.toLocaleString()}
+              </span>
+              &nbsp;bags
+            </Chip>
+          )}
 
-        <Field label="Quantity (bags)">
-          <input
-            type="number"
-            min={1}
-            className={`${inputClass} tabular-nums`}
-            value={request.quantityBags}
-            onChange={(e) =>
-              setRequest({
-                ...request,
-                quantityBags: Number(e.target.value),
-              })
-            }
-          />
-        </Field>
-
-        <div className="grid grid-cols-2 gap-5">
-          <Field label="Delivery location">
+          {editingField === "location" ? (
             <select
-              className={inputClass}
-              value={request.buyerLocation}
+              autoFocus
+              className="rounded-[6px] border border-green bg-cream px-3 py-1.5 text-[14px] font-semibold uppercase text-ink outline-none"
+              value={parsed.buyerLocation}
               onChange={(e) =>
-                setRequest({ ...request, buyerLocation: e.target.value })
+                updateParsed({ buyerLocation: e.target.value })
               }
+              onBlur={() => setEditingField(null)}
             >
               {LOCATIONS.map((l) => (
                 <option key={l} value={l}>
@@ -112,41 +132,88 @@ export function CreateRequest() {
                 </option>
               ))}
             </select>
-          </Field>
+          ) : (
+            <Chip onClick={() => setEditingField("location")}>
+              {parsed.buyerLocation}
+            </Chip>
+          )}
 
-          <Field label="Needed within (days)">
-            <input
-              type="number"
-              min={1}
-              className={`${inputClass} tabular-nums`}
-              value={request.deadlineDays}
-              onChange={(e) =>
-                setRequest({
-                  ...request,
-                  deadlineDays: Number(e.target.value),
-                })
-              }
-            />
-          </Field>
+          {editingField === "deadline" ? (
+            <select
+              autoFocus
+              className="rounded-[6px] border border-green bg-cream px-3 py-1.5 text-[14px] font-semibold uppercase text-ink outline-none"
+              value={parsed.deadlineLabel}
+              onChange={(e) => setDeadlineFromWeekday(e.target.value)}
+              onBlur={() => setEditingField(null)}
+            >
+              <option value="today">Today</option>
+              <option value="tomorrow">Tomorrow</option>
+              {WEEKDAYS.map((w) => (
+                <option key={w} value={w}>
+                  {w}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <Chip onClick={() => setEditingField("deadline")}>
+              by {parsed.deadlineLabel}
+            </Chip>
+          )}
         </div>
 
-        <Field label={`Sourcing radius: ${request.radiusKm} km`}>
-          <input
-            type="range"
-            min={10}
-            max={150}
-            step={10}
-            value={request.radiusKm}
-            onChange={(e) =>
-              setRequest({ ...request, radiusKm: Number(e.target.value) })
-            }
-            className="w-full accent-green"
-          />
-        </Field>
+        <p className="mt-6 text-[13px] text-neutral-500">
+          Grade A · sourcing within 50 km — tap anything above to change it
+        </p>
 
-        <Button type="submit" className="mt-4 self-start">
-          Find supply
-        </Button>
+        <div className="mt-10 flex items-center gap-3">
+          <Button variant="secondary" onClick={() => setParsed(null)}>
+            Start over
+          </Button>
+          <Button onClick={handleConfirm}>Find supply</Button>
+        </div>
+      </main>
+    );
+  }
+
+  // ---- step 1: natural-language ask ----
+  return (
+    <main className="mx-auto flex min-h-screen max-w-2xl flex-col items-center justify-center px-6 py-16 text-center">
+      <Logo variant="hero" height={30} />
+
+      <h1 className="font-display mt-10 text-[48px] font-light leading-[1.08] text-ink">
+        What do you want to buy?
+      </h1>
+      <p className="mt-4 text-[17px] font-medium text-neutral-600">
+        Tell us in plain language. We'll assemble it from fragmented supply
+        across the network.
+      </p>
+
+      <form onSubmit={handleSubmit} className="mt-10 w-full">
+        <input
+          ref={inputRef}
+          type="text"
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value);
+            if (error) setError(null);
+          }}
+          placeholder="I need 500 bags of maize in Kaduna by Monday."
+          className="w-full rounded-[10px] border border-neutral-200 bg-white/60 px-6 py-5 text-[18px] font-normal text-ink placeholder:text-neutral-400 outline-none transition-colors focus:border-green"
+        />
+
+        {error && (
+          <p className="mt-3 text-[13px] font-medium text-[#8a6423]">
+            {error}
+          </p>
+        )}
+
+        <div
+          className={`mt-6 transition-opacity duration-150 ${
+            text.trim() ? "opacity-100" : "pointer-events-none opacity-0"
+          }`}
+        >
+          <Button type="submit">Continue</Button>
+        </div>
       </form>
     </main>
   );

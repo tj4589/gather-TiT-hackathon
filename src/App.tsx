@@ -1,4 +1,4 @@
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, useLocation } from "react-router-dom";
 import { Logo } from "./components/ui/Logo";
 import { CreateRequest } from "./screens/CreateRequest";
 import { ProcurementResults } from "./screens/ProcurementResults";
@@ -14,9 +14,12 @@ function Nav() {
 }
 
 function App() {
+  const { pathname } = useLocation();
+  const isLanding = pathname === "/";
+
   return (
     <div className="min-h-screen bg-cream">
-      <Nav />
+      {!isLanding && <Nav />}
       <Routes>
         <Route path="/" element={<CreateRequest />} />
         <Route path="/results" element={<ProcurementResults />} />
