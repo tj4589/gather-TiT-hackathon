@@ -1,4 +1,4 @@
-import type { Supplier } from "../lib/types";
+import type { MatchedSupplier } from "../lib/types";
 
 const SEGMENT_COLORS = [
   "bg-green",
@@ -13,7 +13,7 @@ export function SupplierBreakdown({
   suppliers,
   totalBags,
 }: {
-  suppliers: Supplier[];
+  suppliers: MatchedSupplier[];
   totalBags: number;
 }) {
   return (
@@ -25,9 +25,9 @@ export function SupplierBreakdown({
             key={s.id}
             className={`${SEGMENT_COLORS[i % SEGMENT_COLORS.length]} h-full transition-[width] duration-500 ease-out first:rounded-l-[8px] last:rounded-r-[8px]`}
             style={{
-              width: `${(s.availableBags / totalBags) * 100}%`,
+              width: `${totalBags > 0 ? (s.contributedBags / totalBags) * 100 : 0}%`,
             }}
-            title={`${s.name} — ${s.availableBags} bags`}
+            title={`${s.name} — ${s.contributedBags} bags`}
           />
         ))}
       </div>
@@ -51,7 +51,7 @@ export function SupplierBreakdown({
               </div>
             </div>
             <p className="tabular-nums shrink-0 text-[15px] font-semibold text-ink">
-              {s.availableBags.toLocaleString()} bags
+              {s.contributedBags.toLocaleString()} bags
             </p>
           </li>
         ))}
