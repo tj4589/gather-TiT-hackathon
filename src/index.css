@@ -33,11 +33,23 @@
 }
 
 body {
+  margin: 0;
   background: var(--color-cream);
   color: var(--color-ink);
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+select,
+input {
+  font: inherit;
+}
+
+::selection {
+  background: var(--color-green-tint-medium);
+  color: var(--color-ink);
 }
 
 .font-display {
@@ -46,4 +58,15 @@ body {
 
 .tabular-nums {
   font-variant-numeric: tabular-nums;
+}
+
+/* voice-level bars on the farmer's feature phone */
+@keyframes voice {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
 }

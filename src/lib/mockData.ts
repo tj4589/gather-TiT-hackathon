@@ -1,9 +1,16 @@
-import type { ProcurementRequest, Supplier } from "./types";
+import type {
+  MatchedSupplier,
+  OrderSummary,
+  ProcurementRequest,
+  Supplier,
+} from "./types";
 
 export const demoRequest: ProcurementRequest = {
   crop: "Maize",
-  quantityBags: 1000,
+  unit: "bags",
+  quantityBags: 1030,
   buyerLocation: "Kaduna",
+  requiredDate: "2026-08-24",
   deadlineDays: 3,
   grade: "Grade A",
   radiusKm: 50,
@@ -143,5 +150,34 @@ export function matchSuppliers(
     Math.round((totalBags / request.quantityBags) * 100)
   );
 
-  return { matched, totalBags, gapBags, percentFulfilled };
+  return {
+    matched: matched.map((supplier) => ({
+      ...supplier,
+      contributedBags: Math.min(
+        supplier.availableBags,
+        Math.max(0, request.quantityBags - matched
+          .slice(0, matched.indexOf(supplier))
+          .reduce((sum, previous) => sum + previous.availableBags, 0)),
+      ),
+    })),
+    totalBags,
+    gapBags,
+    percentFulfilled,
+  };
+}
+
+export function createDemoOrder(
+  request: ProcurementRequest,
+  suppliers: MatchedSupplier[],
+): OrderSummary {
+  return {
+    id: "demo-order-001",
+    demandId: "demo-demand-001",
+    crop: request.crop,
+    grade: request.grade,
+    totalBags: suppliers.reduce((sum, supplier) => sum + supplier.contributedBags, 0),
+    deliveryLocation: request.buyerLocation,
+    readyByDays: Math.max(...suppliers.map((supplier) => supplier.readyInDays)),
+    suppliers,
+  };
 }
