@@ -59,3 +59,14 @@ input {
 .tabular-nums {
   font-variant-numeric: tabular-nums;
 }
+
+/* voice-level bars on the farmer's feature phone */
+@keyframes voice {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
