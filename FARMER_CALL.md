@@ -1,7 +1,9 @@
 # Farmer call demo
 
 Open `http://localhost:5173/farmer`. This is a mobile-first simulated call
-experience for the hackathon demo. It uses browser voice capabilities when
+experience for the hackathon demo. The call stage uses Gather's polished
+feature-phone visual and moves through dialing, ringing, and connected states.
+It uses browser voice capabilities when
 available, but the demo never depends on a microphone, speech recognition, an
 LLM, or provider credentials.
 
