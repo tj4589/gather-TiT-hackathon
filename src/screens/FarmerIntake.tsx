@@ -1,456 +1,156 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  ArrowLeft, ArrowRight, BatteryFull, CalendarDays, Check, ChevronRight, CircleCheck,
+  Coins, MapPin, Mic, MicOff, Package, Phone, Signal, Volume2, Wifi, X,
+} from "lucide-react";
+import { Logo } from "../components/ui/Logo";
 import { Button } from "../components/ui/Button";
 import { FeaturePhone } from "../components/FeaturePhone";
-import {
-  callScript,
-  rejectedCallScript,
-  capturedSupply,
-  verifiedFarmer,
-  verifiedFarmerId,
-  unverifiedFarmerId,
-  type CallLine,
-} from "../lib/farmerScript";
+import { DEMO_TRANSCRIPT, apiBaseUrl, interpretSupply, supplyPayload, type SupplyDraft } from "../lib/supplyInterpreter";
+import { useNavigate } from "react-router-dom";
 
-type CallState = "idle" | "dialing" | "ringing" | "connected" | "ended";
-type Path = "verified" | "rejected";
+type Screen = "entry" | "call" | "understood" | "success";
+type CallPhase = "dialing" | "ringing" | "connected";
+type SpeechRecognitionResult = { [index: number]: { transcript: string } };
+type SpeechRecognizer = {
+  lang: string;
+  interimResults: boolean;
+  maxAlternatives: number;
+  onresult: ((event: { results: { [index: number]: SpeechRecognitionResult } }) => void) | null;
+  onerror: (() => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+};
+type SpeechRecognizerConstructor = new () => SpeechRecognizer;
 
-function speakingDelay(text: string) {
-  return Math.min(2500, Math.max(1000, 620 + text.length * 30));
+declare global {
+  interface Window {
+    SpeechRecognition?: SpeechRecognizerConstructor;
+    webkitSpeechRecognition?: SpeechRecognizerConstructor;
+  }
 }
 
-function VoiceBars({ active }: { active: boolean }) {
+function formatNaira(value: number) {
+  return `NGN ${value.toLocaleString("en-NG")}`;
+}
+
+function StatusBar() {
   return (
-    <div className="flex h-5 items-center justify-center gap-[3px]">
-      {[0, 1, 2, 3, 4, 5, 6].map((i) => (
-        <span
-          key={i}
-          className="w-[2.5px] rounded-sm bg-[#3d4a38]"
-          style={
-            active
-              ? {
-                  height: `${9 + ((i * 7) % 12)}px`,
-                  animation: "voice 0.6s ease-in-out infinite",
-                  animationDelay: `${i * 80}ms`,
-                }
-              : { height: "3px" }
-          }
-        />
-      ))}
+    <div className="flex items-center justify-between px-5 pt-3 text-[11px] font-semibold text-ink">
+      <span className="tabular-nums">9:41</span>
+      <div className="flex items-center gap-1.5 text-neutral-600"><Signal size={14} strokeWidth={1.8} /><Wifi size={14} strokeWidth={1.8} /><BatteryFull size={16} strokeWidth={1.8} /></div>
+    </div>
+  );
+}
+
+function CallHeader({ onEnd }: { onEnd: () => void }) {
+  return (
+    <div className="flex items-center justify-between px-5 pt-6">
+      <button aria-label="End call" onClick={onEnd} className="rounded-full p-2 text-neutral-500 transition-colors hover:bg-neutral-100"><X size={20} /></button>
+      <span className="text-[12px] font-medium uppercase tracking-[0.12em] text-neutral-500">Gather line</span>
+      <span className="w-9" />
+    </div>
+  );
+}
+
+function SupplyCard({ draft }: { draft: SupplyDraft }) {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const details = [
+    { icon: Package, label: "Harvest", value: `${draft.quantity.toLocaleString()} ${draft.unit}` },
+    { icon: MapPin, label: "Location", value: draft.location },
+    { icon: Coins, label: "Price", value: `${formatNaira(draft.price_per_unit)} per ${draft.unit.replace(/s$/, "")}` },
+    { icon: CalendarDays, label: "Ready", value: draft.available_date === tomorrow.toISOString().slice(0, 10) ? "Tomorrow" : draft.available_date },
+  ];
+  return (
+    <div className="overflow-hidden rounded-[10px] border border-neutral-200 bg-cream">
+      <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4"><div><p className="text-[12px] font-medium uppercase tracking-[0.1em] text-neutral-500">Gather understood</p><h2 className="mt-1 font-display text-[27px] font-medium capitalize leading-tight text-ink">{draft.crop}</h2></div><CircleCheck className="text-green" size={26} strokeWidth={1.7} /></div>
+      <div className="grid grid-cols-2 divide-x divide-y divide-neutral-200">{details.map(({ icon: Icon, label, value }) => <div key={label} className="flex min-h-[88px] flex-col justify-center gap-2 px-5 py-4"><div className="flex items-center gap-2 text-neutral-500"><Icon size={15} strokeWidth={1.7} /><span className="text-[12px] font-medium">{label}</span></div><span className="text-[16px] font-semibold capitalize tabular-nums text-ink">{value}</span></div>)}</div>
     </div>
   );
 }
 
 export function FarmerIntake() {
-  const [path, setPath] = useState<Path>("verified");
-  const [callState, setCallState] = useState<CallState>("idle");
-  const [lineIndex, setLineIndex] = useState(-1);
-  const [speaker, setSpeaker] = useState<CallLine["speaker"] | null>(null);
+  const navigate = useNavigate();
+  const [screen, setScreen] = useState<Screen>("entry");
+  const [callPhase, setCallPhase] = useState<CallPhase>("dialing");
   const [seconds, setSeconds] = useState(0);
-  const [dialed, setDialed] = useState("");
-
-  const timeouts = useRef<number[]>([]);
-  const interval = useRef<number | undefined>(undefined);
-  const cancelled = useRef(false);
-
-  const script = path === "verified" ? callScript : rejectedCallScript;
-
-  function clearAllTimers() {
-    timeouts.current.forEach((t) => window.clearTimeout(t));
-    timeouts.current = [];
-    if (interval.current) window.clearInterval(interval.current);
-  }
+  const [isListening, setIsListening] = useState(false);
+  const [transcript, setTranscript] = useState("");
+  const [typedResponse, setTypedResponse] = useState("");
+  const [draft, setDraft] = useState<SupplyDraft | null>(null);
+  const [error, setError] = useState("");
+  const [submissionMode, setSubmissionMode] = useState<"backend" | "demo" | null>(null);
+  const recognitionRef = useRef<SpeechRecognizer | null>(null);
+  const callTimersRef = useRef<number[]>([]);
+  const recognitionAvailable = useMemo(() => typeof window !== "undefined" && Boolean(window.SpeechRecognition || window.webkitSpeechRecognition), []);
 
   useEffect(() => {
-    return () => {
-      cancelled.current = true;
-      clearAllTimers();
-    };
-  }, []);
+    if (screen !== "call" || callPhase !== "connected") return;
+    const timer = window.setInterval(() => setSeconds((current) => current + 1), 1000);
+    window.speechSynthesis?.cancel();
+    window.speechSynthesis?.speak(new SpeechSynthesisUtterance("Welcome to Gather. Tell me what produce you have available for sale."));
+    return () => { window.clearInterval(timer); window.speechSynthesis?.cancel(); };
+  }, [callPhase, screen]);
 
-  function playLine(index: number, activeScript: CallLine[]) {
-    if (cancelled.current) return;
-    if (index >= activeScript.length) {
-      const t = window.setTimeout(() => {
-        if (cancelled.current) return;
-        clearAllTimers();
-        setCallState("ended");
-        setSpeaker(null);
-      }, 900);
-      timeouts.current.push(t);
-      return;
-    }
-
-    const line = activeScript[index];
-    setLineIndex(index);
-    setSpeaker(line.speaker);
-
-    const hold = line.stage === "verifying" ? 1500 : speakingDelay(line.text);
-
-    const t = window.setTimeout(() => {
-      if (cancelled.current) return;
-      setSpeaker(null);
-      const gap = window.setTimeout(
-        () => playLine(index + 1, activeScript),
-        340
-      );
-      timeouts.current.push(gap);
-    }, hold);
-    timeouts.current.push(t);
+  function clearCallTimers() {
+    callTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+    callTimersRef.current = [];
   }
 
-  function startCall(which: Path) {
-    cancelled.current = false;
-    setPath(which);
-    setSeconds(0);
-    setLineIndex(-1);
-    setDialed("");
-    setCallState("dialing");
-
-    const number = "*247#";
-    number.split("").forEach((_, i) => {
-      const t = window.setTimeout(() => {
-        if (cancelled.current) return;
-        setDialed(number.slice(0, i + 1));
-      }, 200 * (i + 1));
-      timeouts.current.push(t);
-    });
-
-    const ring = window.setTimeout(() => {
-      if (cancelled.current) return;
-      setCallState("ringing");
-    }, 200 * number.length + 380);
-    timeouts.current.push(ring);
-
-    const connect = window.setTimeout(() => {
-      if (cancelled.current) return;
-      setCallState("connected");
-      interval.current = window.setInterval(
-        () => setSeconds((s) => s + 1),
-        1000
-      );
-      playLine(0, which === "verified" ? callScript : rejectedCallScript);
-    }, 200 * number.length + 1800);
-    timeouts.current.push(connect);
+  function beginCall() {
+    clearCallTimers();
+    setSeconds(0); setTranscript(""); setTypedResponse(""); setDraft(null); setError(""); setSubmissionMode(null);
+    setCallPhase("dialing"); setScreen("call");
+    callTimersRef.current.push(window.setTimeout(() => setCallPhase("ringing"), 900));
+    callTimersRef.current.push(window.setTimeout(() => setCallPhase("connected"), 1900));
   }
 
-  function resetCall() {
-    cancelled.current = true;
-    clearAllTimers();
-    setCallState("idle");
-    setSpeaker(null);
-    setLineIndex(-1);
-    setSeconds(0);
-    setDialed("");
+  function endCall() {
+    clearCallTimers(); recognitionRef.current?.stop(); window.speechSynthesis?.cancel(); setIsListening(false); setScreen("entry");
+  }
+  function interpret(transcriptValue: string) {
+    setTranscript(transcriptValue);
+    const interpreted = interpretSupply(transcriptValue);
+    if (!interpreted) { setError("I could not catch all the details. Try the demo response or say the whole harvest again."); return; }
+    clearCallTimers(); recognitionRef.current?.stop(); setError(""); setDraft(interpreted); setScreen("understood");
+    window.speechSynthesis?.speak(new SpeechSynthesisUtterance("I have understood your harvest. Please check the details."));
+  }
+  function useDemoResponse() { interpret(DEMO_TRANSCRIPT); }
+  function startListening() {
+    const Constructor = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Constructor) { setError("Speech recognition is not available in this browser. Use the demo response below."); return; }
+    const recognition = new Constructor();
+    recognition.lang = "en-NG"; recognition.interimResults = false; recognition.maxAlternatives = 1;
+    recognition.onresult = (event) => { const result = event.results[0][0].transcript; setIsListening(false); interpret(result); };
+    recognition.onerror = () => { setIsListening(false); setError("I could not hear that. Try again or use the demo response."); };
+    recognition.onend = () => setIsListening(false);
+    recognitionRef.current = recognition; setError(""); setIsListening(true); recognition.start();
+  }
+  function useTypedResponse() { interpret(typedResponse); }
+  async function confirmHarvest() {
+    if (!draft) return;
+    const payload = supplyPayload(draft);
+    try {
+      const response = await fetch(`${apiBaseUrl()}/api/supplies`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      if (!response.ok) throw new Error(`Supply API returned ${response.status}`);
+      setSubmissionMode("backend");
+    } catch { setSubmissionMode("demo"); }
+    setScreen("success");
   }
 
-  const duration = `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(
-    seconds % 60
-  ).padStart(2, "0")}`;
-
-  const currentLine = lineIndex >= 0 ? script[lineIndex] : null;
-  const stage = currentLine?.stage;
-  const reachedStage = (s: NonNullable<CallLine["stage"]>) =>
-    script.slice(0, lineIndex + 1).some((l) => l.stage === s);
-
-  const isRejected = path === "rejected" && reachedStage("rejected");
-  const identityVerified = path === "verified" && reachedStage("verified");
-  const registered = path === "verified" && reachedStage("registered");
-  const screenTint = isRejected ? "red" : stage === "verifying" ? "amber" : "green";
-
-  // supply fields resolve as the farmer answers each question
-  const supplyRevealAt = { crop: 7, quantity: 7, location: 9, availability: 11 };
-  const revealed = (at: number) =>
-    path === "verified" && (callState === "ended" || lineIndex >= at);
-
+  const timer = `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
   return (
-    <main className="mx-auto max-w-5xl px-6 py-14">
-      <div className="text-center">
-        <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-neutral-400">
-          Farmer intake
-        </p>
-        <h1 className="font-display mt-2 text-[34px] font-light leading-[1.15] text-ink">
-          No smartphone required
-        </h1>
-        <p className="mx-auto mt-3 max-w-lg text-[15px] leading-[1.55] text-neutral-500">
-          A farmer dials a short code from any phone. gather verifies their
-          identity against the NDDF register, then captures their supply by
-          voice.
-        </p>
-      </div>
+    <main className="min-h-[calc(100vh-65px)] bg-cream px-4 py-5 sm:px-6 sm:py-10">
+      <div className="mx-auto w-full max-w-[430px] overflow-hidden rounded-[10px] border border-neutral-200 bg-[#fffaf3] sm:min-h-[720px]"><StatusBar />
+        {screen === "entry" && <section className="px-5 pb-8 pt-9"><div className="flex items-center justify-between"><Logo variant="nav" height={29} /><span className="rounded-[6px] bg-green-tint-soft px-2.5 py-1 text-[12px] font-medium text-green-800">Farmer line</span></div><div className="mt-16"><p className="text-[13px] font-medium uppercase tracking-[0.12em] text-green">Gather voice</p><h1 className="mt-3 font-display text-[40px] font-light leading-[1.08] text-ink">Sell what you have.</h1><p className="mt-4 max-w-[330px] text-[17px] leading-[1.5] text-neutral-500">Tell Gather about your harvest in your own words. We turn it into supply buyers can find.</p></div><div className="mt-10 rounded-[10px] border border-neutral-200 bg-cream px-5 py-5"><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-full bg-green text-cream"><Phone size={18} fill="currentColor" /></div><div><p className="font-semibold text-ink">Gather line</p><p className="text-[13px] text-neutral-500">A simple conversation, no forms</p></div></div><div className="mt-5 flex items-center gap-2 border-t border-neutral-200 pt-4 text-[13px] text-neutral-600"><Volume2 size={15} className="text-green" /> Speak naturally, or use the demo response.</div></div><Button onClick={beginCall} className="mt-7 h-14 w-full text-[16px]"><Phone size={18} fill="currentColor" /> Call Gather</Button><p className="mt-4 text-center text-[12px] text-neutral-400">small harvests. serious supply.</p></section>}
 
-      <div className="mt-14 grid items-start gap-14 md:grid-cols-[232px_1fr] md:justify-center">
-        <FeaturePhone
-          keypadGlow={callState === "dialing"}
-          screenTint={screenTint}
-        >
-          {callState === "idle" && (
-            <div className="flex h-full flex-col">
-              <div className="flex items-center justify-between text-[8px] font-medium text-[#3d4a38]">
-                <span>▮▮▮</span>
-                <span>MTN NG</span>
-                <span>▮</span>
-              </div>
-              <div className="flex flex-1 flex-col items-center justify-center gap-1">
-                <p className="text-[10px] text-[#3d4a38]">Dial</p>
-                <p className="tabular-nums text-[20px] font-semibold tracking-[0.08em] text-[#26301f]">
-                  *247#
-                </p>
-              </div>
-              <p className="text-center text-[8px] text-[#4d5a48]">
-                Standard call rates apply
-              </p>
-            </div>
-          )}
+        {screen === "call" && <section className="px-5 pb-8"><CallHeader onEnd={endCall} /><div className="mt-7 text-center"><p className="text-[12px] font-medium uppercase tracking-[0.12em] text-green">{callPhase === "connected" ? "Connected" : callPhase === "ringing" ? "Calling" : "Starting call"}</p><h1 className="mt-2 font-display text-[28px] font-medium text-ink">Gather</h1>{callPhase === "connected" && <p className="mt-1 text-[13px] tabular-nums text-neutral-500">{timer} | Connected</p>}</div><div className="mt-6"><FeaturePhone keypadGlow={callPhase === "dialing"} screenTint={callPhase === "ringing" ? "amber" : "green"}>{callPhase === "dialing" && <div className="flex h-full flex-col items-center justify-center gap-2"><Phone size={20} className="text-[#26301f]" /><p className="text-[12px] font-semibold text-[#26301f]">Dialing Gather...</p></div>}{callPhase === "ringing" && <div className="flex h-full flex-col items-center justify-center gap-2"><p className="text-[17px] font-semibold text-[#26301f]">Gather</p><p className="text-[11px] text-[#3d4a38]">Ringing...</p></div>}{callPhase === "connected" && <div className="flex h-full flex-col"><div className="flex items-center justify-between text-[9px] font-medium text-[#3d4a38]"><span>gather</span><span className="tabular-nums">{timer}</span></div><div className="flex flex-1 flex-col items-center justify-center gap-3 px-1"><p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[#4d5a48]">{isListening ? "Listening" : "Gather"}</p><div className={`flex h-6 items-end gap-[3px] ${isListening ? "animate-pulse" : ""}`}>{[0, 1, 2, 3, 4].map((bar) => <span key={bar} className="w-[3px] rounded-sm bg-[#3d4a38]" style={{ height: `${8 + bar * 4}px` }} />)}</div><p className="text-center text-[11px] leading-[1.45] text-[#26301f]">Tell me what produce you have available for sale.</p></div><p className="text-center text-[9px] text-[#4d5a48]">Voice | English</p></div>}</FeaturePhone></div><div className="mt-6 flex flex-col gap-3"><button disabled={callPhase !== "connected"} onClick={startListening} className="flex h-12 items-center justify-center gap-2 rounded-[10px] border border-green bg-transparent text-[15px] font-medium text-green transition-colors hover:bg-green-tint-subtle disabled:opacity-40">{isListening ? <MicOff size={18} /> : <Mic size={18} />}{isListening ? "Listening..." : recognitionAvailable ? "Speak your harvest" : "Speak (browser unavailable)"}</button><button disabled={callPhase !== "connected"} onClick={useDemoResponse} className="flex h-12 items-center justify-center gap-2 rounded-[10px] bg-green text-[15px] font-medium text-cream transition-colors hover:bg-green-700 disabled:opacity-40"><ChevronRight size={18} /> Use demo response</button></div><div className="mt-5 border-t border-neutral-200 pt-5"><label className="text-[12px] font-medium text-neutral-500" htmlFor="typed-response">Or type what you have</label><div className="mt-2 flex gap-2"><input id="typed-response" value={typedResponse} onChange={(event) => setTypedResponse(event.target.value)} placeholder="I have 310 bags of maize..." className="min-w-0 flex-1 rounded-[10px] border border-neutral-200 bg-cream px-3 py-2.5 text-[13px] outline-none focus:border-green" /><button disabled={callPhase !== "connected"} onClick={useTypedResponse} aria-label="Interpret typed response" className="rounded-[10px] border border-neutral-300 px-3 text-green hover:bg-green-tint-subtle disabled:opacity-40"><ArrowLeft className="rotate-180" size={17} /></button></div></div>{error && <p className="mt-4 text-center text-[13px] text-neutral-600">{error}</p>}</section>}
 
-          {callState === "dialing" && (
-            <div className="flex h-full items-center justify-center">
-              <p className="tabular-nums text-[23px] font-semibold tracking-[0.1em] text-[#26301f]">
-                {dialed}
-                <span className="animate-pulse">|</span>
-              </p>
-            </div>
-          )}
+        {screen === "understood" && draft && <section className="px-5 pb-8 pt-6"><CallHeader onEnd={endCall} /><div className="mt-8"><p className="text-[12px] font-medium uppercase tracking-[0.12em] text-green">Your harvest</p><h1 className="mt-2 font-display text-[32px] font-light leading-tight text-ink">Does this sound right?</h1></div><div className="mt-6 rounded-[10px] border border-neutral-200 bg-green-tint-subtle px-5 py-4"><p className="text-[12px] font-medium uppercase tracking-[0.1em] text-neutral-500">You said</p><p className="mt-2 text-[16px] italic leading-[1.45] text-ink">"{transcript}"</p></div><div className="mt-5"><SupplyCard draft={draft} /></div><Button onClick={confirmHarvest} className="mt-7 h-14 w-full text-[16px]"><Check size={19} /> Confirm harvest</Button><button onClick={beginCall} className="mt-4 flex w-full items-center justify-center gap-2 py-2 text-[14px] font-medium text-green hover:text-green-800"><ArrowLeft size={16} /> Say it again</button></section>}
 
-          {callState === "ringing" && (
-            <div className="flex h-full flex-col items-center justify-center gap-1.5">
-              <p className="text-[14px] font-semibold text-[#26301f]">gather</p>
-              <p className="text-[10px] text-[#3d4a38]">Calling…</p>
-            </div>
-          )}
-
-          {callState === "connected" && (
-            <div className="flex h-full flex-col">
-              <div className="flex items-center justify-between text-[8px] font-medium text-[#3d4a38]">
-                <span>gather</span>
-                <span className="tabular-nums">{duration}</span>
-              </div>
-
-              <div className="flex flex-1 flex-col items-center justify-center gap-2 px-0.5">
-                {stage === "verifying" ? (
-                  <>
-                    <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-[#5b5433]">
-                      NDDF
-                    </p>
-                    <div className="flex gap-1">
-                      {[0, 1, 2].map((i) => (
-                        <span
-                          key={i}
-                          className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#5b5433]"
-                          style={{ animationDelay: `${i * 140}ms` }}
-                        />
-                      ))}
-                    </div>
-                    <p className="text-center text-[11px] leading-[1.4] text-[#3f3a1f]">
-                      Checking the register…
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p
-                      className={`text-[9px] font-semibold uppercase tracking-[0.1em] ${
-                        isRejected ? "text-[#6d3b32]" : "text-[#4d5a48]"
-                      }`}
-                    >
-                      {speaker === "farmer" ? "You" : "gather"}
-                    </p>
-                    <VoiceBars active={!!speaker} />
-                    {currentLine && (
-                      <p
-                        className={`text-center text-[11px] leading-[1.45] ${
-                          isRejected ? "text-[#4a221b]" : "text-[#26301f]"
-                        }`}
-                      >
-                        {currentLine.text}
-                      </p>
-                    )}
-                  </>
-                )}
-              </div>
-
-              <p
-                className={`text-center text-[8px] ${
-                  isRejected ? "text-[#6d3b32]" : "text-[#4d5a48]"
-                }`}
-              >
-                {isRejected ? "Not verified" : "Voice · English"}
-              </p>
-            </div>
-          )}
-
-          {callState === "ended" && (
-            <div className="flex h-full flex-col">
-              <div className="flex items-center justify-between text-[8px] font-medium text-[#3d4a38]">
-                <span>gather</span>
-                <span className="tabular-nums">{duration}</span>
-              </div>
-
-              {path === "rejected" ? (
-                <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
-                  <p className="text-[10px] text-[#6d3b32]">Call ended</p>
-                  <div className="w-full rounded-[4px] border border-[#a8776c] px-2 py-2">
-                    <p className="text-[9px] font-semibold uppercase tracking-[0.08em] text-[#6d3b32]">
-                      Not verified
-                    </p>
-                    <p className="mt-1 text-[11px] leading-[1.35] text-[#4a221b]">
-                      ID not on NDDF register
-                    </p>
-                  </div>
-                  <p className="text-[8px] text-[#6d3b32]">No supply added</p>
-                </div>
-              ) : (
-                <div className="flex flex-1 flex-col items-center justify-center gap-1.5">
-                  <p className="text-[10px] text-[#3d4a38]">Call ended</p>
-                  <div className="w-full rounded-[4px] border border-[#8fa382] px-2 py-1.5 text-center">
-                    <p className="text-[9px] font-semibold uppercase tracking-[0.08em] text-[#4d5a48]">
-                      Supply added
-                    </p>
-                    <p className="tabular-nums mt-0.5 text-[12px] font-semibold text-[#26301f]">
-                      {capturedSupply.bags} bags · {capturedSupply.crop}
-                    </p>
-                    <p className="text-[9px] text-[#3d4a38]">
-                      {capturedSupply.location} · tomorrow
-                    </p>
-                  </div>
-                  <p className="text-[8px] text-[#4d5a48]">
-                    SMS confirmation sent
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-        </FeaturePhone>
-
-        {/* side panel */}
-        <div className="flex flex-col">
-          {/* identity */}
-          <p className="text-[12px] font-semibold uppercase tracking-[0.06em] text-neutral-400">
-            Identity · NDDF
-          </p>
-          <div className="mt-4 rounded-[10px] border border-neutral-200 px-5 py-4">
-            <div className="flex items-center justify-between">
-              <span className="text-[13px] text-neutral-500">Farmer ID</span>
-              <span className="tabular-nums text-[15px] font-medium text-ink">
-                {callState === "idle"
-                  ? "—"
-                  : path === "verified"
-                    ? verifiedFarmerId
-                    : unverifiedFarmerId}
-              </span>
-            </div>
-
-            <div className="mt-3 flex items-center justify-between border-t border-neutral-100 pt-3">
-              <span className="text-[13px] text-neutral-500">Status</span>
-              {isRejected ? (
-                <span className="rounded-[6px] bg-[#f2e2dd] px-2.5 py-1 text-[13px] font-semibold text-[#8a3f30]">
-                  Not on register
-                </span>
-              ) : identityVerified ? (
-                <span className="rounded-[6px] bg-green-tint-soft px-2.5 py-1 text-[13px] font-semibold text-green-800">
-                  Verified
-                </span>
-              ) : stage === "verifying" ? (
-                <span className="rounded-[6px] bg-gold-tint-soft px-2.5 py-1 text-[13px] font-semibold text-[#8a6423]">
-                  Checking…
-                </span>
-              ) : (
-                <span className="text-[15px] text-neutral-300">—</span>
-              )}
-            </div>
-
-            <div className="mt-3 flex items-center justify-between border-t border-neutral-100 pt-3">
-              <span className="text-[13px] text-neutral-500">
-                Name on record
-              </span>
-              <span
-                className={`text-[15px] font-medium transition-opacity duration-300 ${
-                  identityVerified
-                    ? "text-ink opacity-100"
-                    : "text-neutral-300 opacity-50"
-                }`}
-              >
-                {identityVerified ? verifiedFarmer.name : "—"}
-              </span>
-            </div>
-
-            {registered && (
-              <p className="mt-4 rounded-[6px] bg-green-tint-subtle px-3 py-2 text-[13px] text-green-800">
-                gather farmer ID created for {verifiedFarmer.name}.
-              </p>
-            )}
-            {isRejected && (
-              <p className="mt-4 rounded-[6px] bg-[#faf0ed] px-3 py-2 text-[13px] text-[#8a3f30]">
-                Cannot proceed — caller is not a registered farmer.
-              </p>
-            )}
-          </div>
-
-          {/* supply */}
-          <p className="mt-8 text-[12px] font-semibold uppercase tracking-[0.06em] text-neutral-400">
-            Supply captured
-          </p>
-          <div
-            className={`mt-4 flex flex-col divide-y divide-neutral-200 border-y border-neutral-200 transition-opacity duration-300 ${
-              path === "rejected" && callState !== "idle"
-                ? "opacity-35"
-                : "opacity-100"
-            }`}
-          >
-            {(
-              [
-                ["Crop", capturedSupply.crop, supplyRevealAt.crop],
-                ["Quantity", `${capturedSupply.bags} bags`, supplyRevealAt.quantity],
-                ["Location", capturedSupply.location, supplyRevealAt.location],
-                [
-                  "Availability",
-                  capturedSupply.availability,
-                  supplyRevealAt.availability,
-                ],
-              ] as const
-            ).map(([label, value, at]) => {
-              const show = revealed(at);
-              return (
-                <div
-                  key={label}
-                  className="flex items-center justify-between py-3"
-                >
-                  <span className="text-[13px] text-neutral-500">{label}</span>
-                  <span
-                    className={`tabular-nums text-[15px] font-medium transition-opacity duration-300 ${
-                      show ? "text-ink opacity-100" : "text-neutral-300 opacity-40"
-                    }`}
-                  >
-                    {show ? value : "—"}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* controls */}
-          <div className="mt-8 flex flex-wrap items-center gap-3">
-            {callState === "idle" && (
-              <>
-                <Button onClick={() => startCall("verified")}>
-                  Play verified call
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => startCall("rejected")}
-                >
-                  Play unverified call
-                </Button>
-              </>
-            )}
-            {callState === "ended" && (
-              <Button variant="secondary" onClick={resetCall}>
-                Reset
-              </Button>
-            )}
-            {callState !== "idle" && callState !== "ended" && (
-              <p className="text-[13px] text-neutral-400">Call in progress…</p>
-            )}
-          </div>
-        </div>
+        {screen === "success" && draft && <section className="px-5 pb-8 pt-16 text-center"><div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green text-cream"><Check size={30} strokeWidth={2} /></div><h1 className="mt-7 font-display text-[34px] font-light leading-tight text-ink">Harvest shared.</h1><p className="mx-auto mt-3 max-w-[310px] text-[16px] leading-[1.5] text-neutral-500">{draft.quantity} bags of {draft.crop} have been added to Gather's supply network.</p><div className="mt-8 text-left"><SupplyCard draft={draft} /></div><div className={`mt-5 flex items-start gap-3 rounded-[10px] border px-4 py-4 text-left ${submissionMode === "backend" ? "border-green/30 bg-green-tint-subtle" : "border-gold/30 bg-gold-tint-subtle"}`}><CircleCheck size={18} className="mt-0.5 shrink-0 text-green" /><p className="text-[13px] font-semibold leading-[1.45] text-ink">{submissionMode === "backend" ? "Added to Gather supply network" : "Demo mode — not published to live supply"}</p></div><Button onClick={() => navigate("/results")} className="mt-8 h-14 w-full"><ArrowRight size={17} /> Return to buyer progress</Button><Button variant="secondary" onClick={beginCall} className="mt-3 h-12 w-full"><Phone size={17} /> Call again</Button></section>}
       </div>
     </main>
   );

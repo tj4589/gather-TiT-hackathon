@@ -69,10 +69,14 @@ export function parseRequest(
 export function toProcurementRequest(
   parsed: ParsedRequest
 ): ProcurementRequest {
+  const requiredDate = new Date();
+  requiredDate.setDate(requiredDate.getDate() + parsed.deadlineDays);
   return {
     crop: parsed.crop,
+    unit: "bags",
     quantityBags: parsed.quantityBags,
     buyerLocation: parsed.buyerLocation,
+    requiredDate: requiredDate.toISOString().slice(0, 10),
     deadlineDays: parsed.deadlineDays,
     grade: "Grade A",
     radiusKm: 50,

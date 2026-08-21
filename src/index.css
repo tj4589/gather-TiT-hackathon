@@ -33,11 +33,23 @@
 }
 
 body {
+  margin: 0;
   background: var(--color-cream);
   color: var(--color-ink);
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+select,
+input {
+  font: inherit;
+}
+
+::selection {
+  background: var(--color-green-tint-medium);
+  color: var(--color-ink);
 }
 
 .font-display {
@@ -46,6 +58,23 @@ body {
 
 .tabular-nums {
   font-variant-numeric: tabular-nums;
+}
+
+.entry-hero-logo {
+  height: 88px !important;
+  width: auto;
+}
+
+@media (min-width: 640px) {
+  .entry-hero-logo {
+    height: 104px !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  .entry-hero-logo {
+    height: 112px !important;
+  }
 }
 
 /* voice-level bars on the farmer's feature phone */
